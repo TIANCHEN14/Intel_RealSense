@@ -22,4 +22,16 @@ pipeline_profile = config.resolve(pipeline_wrapper)
 device = pipeline_profile.get_device()
 device_product_line = str(device.get_info(rs.camera_info.product_line))
 
-print("Device : ", device)
+found_rgb = False
+
+for s in device.sensors:
+    if s.get_info(rs.camera_info.name) == 'RGB Camera':
+        found_rgb = True
+        break
+
+    if not found_rgb:
+        print('This program need to have RGB with depth camera')
+        break
+    
+
+
