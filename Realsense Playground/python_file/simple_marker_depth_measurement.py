@@ -78,13 +78,24 @@ try:
         # here is the part to generate all the markers
         marker_corners, marker_Ids, rej = detector.detectMarkers(gray_image)
 
+        # create an marker info dict
+        marker_info = {}
+
         if marker_Ids is not None:
+            for i in range(len(marker_Ids)):
+                marker_id = marker_Ids[i][0] # extract marker ID
+                corner_point = marker_corners[i][0] # extract marker corners
+                # we combine all the marker id and corner points in the marker_info dict
+                marker_info[marker_id] = corner_point
+
             if 0 in marker_Ids:
-                print('Yes')
+                #print('Yes')
                 cv2.aruco.drawDetectedMarkers(color_image, marker_corners, marker_Ids)
-                print(marker_corners)
+                #print(marker_corners)
         
-    
+        # put text on the video streams for easy lookup
+        
+
 
         #image = np.hstack((color_image , grey_image))
         cv2.namedWindow('Color Image' , cv2.WINDOW_NORMAL)
