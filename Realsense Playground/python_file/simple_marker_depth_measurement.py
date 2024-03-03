@@ -92,6 +92,15 @@ try:
                 #print('Yes')
                 cv2.aruco.drawDetectedMarkers(color_image, marker_corners, marker_Ids)
                 #print(marker_corners)
+                #print(marker_info[0][0])
+                corner_depth = (depth_image[int(marker_info[0][0][0]) , int(marker_info[0][0][1])]) * depth_scale
+                print('Corner depth : ' , corner_depth)
+
+
+
+
+
+                
         
         # put text on the video streams for easy lookup
         
