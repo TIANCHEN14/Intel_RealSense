@@ -8,10 +8,27 @@ import pyrealsense2 as rs
 import numpy as np
 # Import OpenCV for easy image rendering
 import cv2
+# import matplotlib for easy visualization
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+import matplotlib.style as style
+
 
 # aruco marker dictionary and intilized
 dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
 aruco_detector = cv2.aruco.ArucoDetector(dictionary)
+
+# set the ploting style for the ploting 
+plt.ion()
+fig, ax = plt.subplots()
+xdata, ydata = [] , []
+line, = ax.plot(xdata , ydata , 'r-')
+ax.set_xlim(0, 100)
+ax.set_ylim(0, 10000)
+ax.set_title("Center Depth")
+ax.set_xlabel("Frame count")
+ax.set_ylabel("Depth")
+frame_count = 0
 
 # Create a pipeline
 pipeline = rs.pipeline()
@@ -105,6 +122,7 @@ try:
         depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image , alpha = 0.04) , cv2.COLORMAP_JET)
         cv2.aruco.drawDetectedMarkers(depth_colormap , marker_corner , marker_id)
 
+        # add the depth value to the color image 
         org = (200, 200)
         font = cv2.FONT_HERSHEY_SIMPLEX
         fontScale = 2
@@ -112,8 +130,27 @@ try:
         thickness = 2
         color_image = cv2.putText(color_image , str(avg_depth), org, font, fontScale , color , thickness , cv2.LINE_AA)
 
+        # here is the part to live plot the depth
+        xdata.append(frame_count)
+        ydata.append(avg_depth)
+        window_size = 100  # Number of data points to display on the plot at any time
 
-        images = np.hstack((color_image , depth_colormap ))
+        # Inside the loop, after adding the new data point
+        if len(xdata) > window_size:
+            ax.set_xlim(xdata[-window_size], xdata[-1])
+        else:
+            ax.set_xlim(xdata[0], xdata[0] + window_size)   
+
+        line.set_xdata(xdata)
+        line.set_ydata(ydata)
+        ax.relim()
+        ax.autoscale_view(True, True , True)
+        plt.draw()
+        plt.pause(0.001)
+        frame_count = frame_count + 1
+
+
+        images = np.hstack((color_image , depth_colormap))
 
         cv2.namedWindow("Align Example" , cv2.WINDOW_AUTOSIZE)
         cv2.imshow('Align Example' , images)
@@ -122,10 +159,14 @@ try:
         # press esc or 'q' to close the image window
         if key & 0XFF == ord('q') or key == 27:
             cv2.destroyAllWindows()
+            plt.close(fig)
             break
+
+
 
 finally:
     pipeline.stop()
+
 
 
 
