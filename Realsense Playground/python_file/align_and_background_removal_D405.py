@@ -47,6 +47,8 @@ clipping_distance = clipping_distance_in_meters / depth_scale
 align_to = rs.stream.color
 align = rs.align(align_to)
 
+avg_depth = 0 
+
 
 # streaming loop
 try:

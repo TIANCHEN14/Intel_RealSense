@@ -10,31 +10,31 @@ import numpy as np
 import cv2
 # import matplotlib for easy visualization
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import matplotlib.style as style
+import streamlit as st
+
 
 
 # aruco marker dictionary and intilized
 dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
 aruco_detector = cv2.aruco.ArucoDetector(dictionary)
 
-# set the ploting style for the ploting 
-plt.ion()
-fig, ax = plt.subplots()
-xdata, ydata = [] , []
-line, = ax.plot(xdata , ydata , 'r-')
-ax.set_xlim(0, 100)
-ax.set_ylim(0, 10000)
-ax.set_title("Center Depth")
-ax.set_xlabel("Frame count")
-ax.set_ylabel("Depth")
-frame_count = 0
+# # set the ploting style for the ploting 
+# plt.ion()
+# fig, ax = plt.subplots()
+# xdata, ydata = [] , []
+# line, = ax.plot(xdata , ydata , 'r-')
+# ax.set_xlim(0, 100)
+# ax.set_ylim(0, 10000)
+# ax.set_title("Center Depth")
+# ax.set_xlabel("Frame count")
+# ax.set_ylabel("Depth")
+# frame_count = 0
 
 # Create a pipeline
 pipeline = rs.pipeline()
 
 # Create a config and configure the pipeline to stream
-#  different resolutions of color and depth streams
+# Different resolutions of color and depth streams
 config = rs.config()
 
 # Get device product line for setting a supporting resolution
@@ -67,6 +67,9 @@ clipping_distance = clipping_distance_in_meters / depth_scale
 # The 'align_to' is the stream type to which we plan to align depth frames
 align_to = rs.stream.color
 align = rs.align(align_to)
+
+# create an marker dict
+marker_dict = {}
 
 
 # streaming loop
@@ -112,7 +115,11 @@ try:
                 # calculate the average depth for ROI
                 avg_depth = np.sum(roi_depth) / np.count_nonzero(roi_depth)
 
-                print('avg_depth is ' , avg_depth)
+                # here is the part to append all the infomation in the marker dictionary
+                marker_dict[int(m_id)] = avg_depth
+
+
+                #print('avg_depth is ' , avg_depth)
 
         ##########################################################################################################################
 
@@ -123,31 +130,38 @@ try:
         cv2.aruco.drawDetectedMarkers(depth_colormap , marker_corner , marker_id)
 
         # add the depth value to the color image 
-        org = (200, 200)
+        #org = (200, 200)
         font = cv2.FONT_HERSHEY_SIMPLEX
         fontScale = 2
         color = (255, 0, 0)
         thickness = 2
-        color_image = cv2.putText(color_image , str(avg_depth), org, font, fontScale , color , thickness , cv2.LINE_AA)
+        
 
-        # here is the part to live plot the depth
-        xdata.append(frame_count)
-        ydata.append(avg_depth)
-        window_size = 100  # Number of data points to display on the plot at any time
+        if marker_dict is not None:
+            for i, k in enumerate(marker_dict):
+                if k < 30 :
+                    display_text = 'ID : ' + str(k) + ' D : ' + str(marker_dict[k])
+                    org = (200, 100*(i+1))
+                    color_image = cv2.putText(color_image , display_text, org, font, fontScale , color , thickness , cv2.LINE_AA)
 
-        # Inside the loop, after adding the new data point
-        if len(xdata) > window_size:
-            ax.set_xlim(xdata[-window_size], xdata[-1])
-        else:
-            ax.set_xlim(xdata[0], xdata[0] + window_size)   
+        # # here is the part to live plot the depth
+        # xdata.append(frame_count)
+        # ydata.append(avg_depth)
+        # window_size = 100  # Number of data points to display on the plot at any time
 
-        line.set_xdata(xdata)
-        line.set_ydata(ydata)
-        ax.relim()
-        ax.autoscale_view(True, True , True)
-        plt.draw()
-        plt.pause(0.001)
-        frame_count = frame_count + 1
+        # # Inside the loop, after adding the new data point
+        # if len(xdata) > window_size:
+        #     ax.set_xlim(xdata[-window_size], xdata[-1])
+        # else:
+        #     ax.set_xlim(xdata[0], xdata[0] + window_size)   
+
+        # line.set_xdata(xdata)
+        # line.set_ydata(ydata)
+        # ax.relim()
+        # ax.autoscale_view(True, True , True)
+        # plt.draw()
+        # plt.pause(0.001)
+        # frame_count = frame_count + 1
 
 
         images = np.hstack((color_image , depth_colormap))
@@ -159,14 +173,13 @@ try:
         # press esc or 'q' to close the image window
         if key & 0XFF == ord('q') or key == 27:
             cv2.destroyAllWindows()
-            plt.close(fig)
+            #plt.close(fig)
             break
 
 
 
 finally:
     pipeline.stop()
-
 
 
 
