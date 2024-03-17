@@ -11,8 +11,9 @@ img_ph = st.empty()
 stop_button = st.button("stop")
 
 while cap.isOpened() and not stop_button:
+    
+    # 
     ret , frame = cap.read()
-
 
     if not ret:
         st.write("video capture is ended")
