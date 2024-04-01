@@ -96,9 +96,10 @@ class marker:
     # simple marker distance detection
     # no filter pure raw images
     def simple_marker_detection(self):
+        
 
         # generated aruco marker with aruco marker detector 
-        marker_corners, marker_ids, rej = self.aruco_detector(self.color_image)
+        marker_corners, marker_ids, rej = self.aruco_detector.detectMarkers(self.color_image)
         
         # draw marker on images
         cv2.aruco.drawDetectedMarkers(self.color_image , marker_corners, marker_ids)
@@ -122,7 +123,21 @@ class marker:
                 avg_depth = np.sum(roi_depth) / np.count_nonzero(roi_depth)
 
                 # append information into the marker dictionary
-                self.marker_dict[int(id)] = avg_depth
+                temp_dict = {}
+                temp_dict['depth'] = avg_depth
+                temp_dict['corner_0'] = marker_corners[index][0][0]
+                temp_dict['corner_1'] = marker_corners[index][0][1]
+                temp_dict['corner_2'] = marker_corners[index][0][2]
+                temp_dict['corner_3'] = marker_corners[index][0][3]
+                self.marker_dict[int(id)] = temp_dict
+
+
+
+                #self.marker_dict[int(id)]['depth'] = avg_depth
+                #self.marker_dict[int(id)]['corner_0'] = marker_corners[index][0]
+                #self.marker_dict[int(id)]['corner_1'] = marker_corners[index][1]
+                #self.marker_dict[int(id)]['corner_2'] = marker_corners[index][2]
+                #self.marker_dict[int(id)]['corner_3'] = marker_corners[index][3]
 
 
         # clear the dictionary 
@@ -151,6 +166,40 @@ class marker:
                     org = (200 , 100*(i+1))
                     self.text_image = cv2.putText(id_background , display_text , org , font , fontScale , color , thickness , cv2.LINE_AA)
 
+
+    # get an particular id's mask
+    def mask_test(self, id):
+        # create an maske image
+        mask = np.zeros(self.depth_image.shape , dtype = np.uint8)
+        
+        
+        
+        # check to see if marker is in the dictionary
+        if id in self.marker_dict:
+             
+            # import all the object into an np array 
+            marker_corner_0 = np.array(self.marker_dict[id]['corner_0'] , dtype = np.int32)
+            marker_corner_0 = np.expand_dims(marker_corner_0 , axis = 0)
+            marker_corner_1 = np.array(self.marker_dict[id]['corner_1'] , dtype = np.int32)
+            marker_corner_1 = np.expand_dims(marker_corner_1 , axis = 0)
+            marker_corner_2 = np.array(self.marker_dict[id]['corner_2'] , dtype = np.int32)
+            marker_corner_2 = np.expand_dims(marker_corner_2 , axis = 0)
+            marker_corner_3 = np.array(self.marker_dict[id]['corner_3'] , dtype = np.int32)
+            marker_corner_3 = np.expand_dims(marker_corner_3 , axis = 0)
+
+            # concatenate the numpy array as an single 2X4 array
+            marker_corner_np = np.concatenate((marker_corner_0 , marker_corner_1 , marker_corner_2 , marker_corner_3) , axis = 0)
+
+            # create an poly fill base on the marker corners
+            cv2.fillPoly(mask , [marker_corner_np] , 255)
+
+            # roi depth mask for image
+            mask = cv2.bitwise_and(self.depth_image , self.depth_image , mask = mask)
+
+            # apply color map for the mask image
+            mask= cv2.applyColorMap(cv2.convertScaleAbs(mask , alpha = 0.04) , cv2.COLORMAP_JET)
+        
+        return mask
 
 
 
