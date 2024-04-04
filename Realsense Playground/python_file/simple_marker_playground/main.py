@@ -8,13 +8,13 @@ while True:
     marker_obj.get_frames()
     marker_obj.simple_marker_detection()
     mask_img = marker_obj.mask_test(1)
-    check_point = marker_obj.ray_casting_check(100 , 500, 1)
+    check_point = marker_obj.ray_casting_check(700 , 500, 1)
     
     # debuging  
     if check_point == True:
-        cv2.circle(mask_img , (100,500) , 20 , (255, 255, 255) , 5)
+        cv2.circle(mask_img , (700,500) , 20 , (255, 255, 255) , 5)
     else :
-        cv2.circle(mask_img , (100,500) , 20 , (0 , 0 , 0) , 5)
+        cv2.circle(mask_img , (700,500) , 20 , (0 , 0 , 0) , 5)
 
 
     merge_image = np.hstack((marker_obj.color_image , marker_obj.depth_colormap))

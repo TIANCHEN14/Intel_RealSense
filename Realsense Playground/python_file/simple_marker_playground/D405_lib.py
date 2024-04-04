@@ -251,9 +251,6 @@ class marker:
     # looking for an specific aruco marker in the marker dict
     def ray_casting_check(self, point_x , point_y ,id):
 
-        # define max system variable
-        huge = sys.float_info.max
-
         # we start from outside of the polygon            
         # states variable declear
         inside = False
@@ -303,28 +300,22 @@ class marker:
                     #point_y = point_y + 0.001
 
                 # check intercept on the horiztal ray casting
-                if point_y > p1y and point_y < p2y:
-                    
-                    # this means it intercept with the first edge
-                    inside = not inside
-                    
-                    # check the slope to make up the odd even times that the ray passing by
-                    # we default these to max because the slope of an function that is parallel to the y axis is infinity
-                    try: 
-                        m_edge = (p2y - p1y) / (p2x - p1x)
-                    except:
-                        m_edge = huge
+                if point_y > p1y and point_y <= p2y:
 
-                    try:
-                        m_point = (point_y - p1y) / (point_x - p1x)
+                    # check if the points are within the bounding box range to save compute time
+                    if point_x <= max(p1x , p2x):
+                        
+                        # make sure that we are not going to divide 0
+                        if p1y != p2y and point_y != p1y:
+                            
+                            # check the slope to make up the odd even times that the ray passing by
+                            m_edge = (p2x - p1x) / (p2y - p1y)
+                            m_point = (point_x - p1x) / (point_y - p1y)
 
-                    except:
-                        m_point = huge
-
-                    # check the slope to see we just need to make sure either one is bigger to get and odd number
+                        # check the slope to see we just need to make sure either one is bigger to get and odd number
                     
-                    if m_point > m_edge:
-                        inside = not inside
+                        if m_point < m_edge:
+                            inside = not inside
                         
                     
                         print("intercept with " , i-1 ,  i)
