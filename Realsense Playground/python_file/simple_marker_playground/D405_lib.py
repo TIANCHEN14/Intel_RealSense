@@ -75,6 +75,8 @@ class marker:
         self.depth_colormap = None
         self.text_image = None
         self.mask_image = None
+        self.test_image = None
+        self.depth_pixel = {}
 
     ##################################################
     ###             Public Function                ###
@@ -101,6 +103,9 @@ class marker:
         # here is the part to pass all the image into the self object  
         self.color_image = np.asanyarray(aligned_color_frame.get_data())
         self.depth_image = np.asanyarray(aligned_depth_frame.get_data())
+        self.test_image = self.color_image
+        self.mask_image = np.zeros((*self.depth_image.shape , 3) , dtype = np.uint8)
+        self.text_image = np.zeros((*self.depth_image.shape , 3) , dtype = np.uint8)
         self.depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(self.depth_image , alpha = 0.04) , cv2.COLORMAP_JET)
         
         return True
@@ -108,14 +113,16 @@ class marker:
     # simple marker distance detection
     # no filter pure raw images
     def simple_marker_detection(self):
-        
 
+        # clear the marker dictionary
+        self.marker_dict.clear()
+        
         # generated aruco marker with aruco marker detector 
         marker_corners, marker_ids, rej = self.aruco_detector.detectMarkers(self.color_image)
         
         # draw marker on images
         cv2.aruco.drawDetectedMarkers(self.color_image , marker_corners, marker_ids)
-        cv2.aruco.drawDetectedMarkers(self.color_image , marker_corners, marker_ids)
+
 
         # error check for markers
         if marker_ids is not None:
@@ -136,7 +143,7 @@ class marker:
 
                 # append information into the marker dictionary
                 temp_dict = {}
-                temp_dict['depth'] = avg_depth
+                temp_dict['non_zero_roi_depth'] = avg_depth
                 temp_dict['corner_0'] = marker_corners[index][0][0]
                 temp_dict['corner_1'] = marker_corners[index][0][1]
                 temp_dict['corner_2'] = marker_corners[index][0][2]
@@ -144,19 +151,19 @@ class marker:
                 self.marker_dict[int(id)] = temp_dict
 
         # clear the dictionary 
-        # marker_dict.clear()
+        
                 
 
     # generate an empty frame and put the ID information into it
     def txt_image_generation(self):
 
         # generate an empty frame with the size of twice of width orginal image and the same height
-        id_background = np.zeros((720 , 2560 , 3) , dtype = np.uint8)
+        id_background = np.zeros((*self.depth_image.shape, 3) , dtype = np.uint8)
 
         # defining text properity
         font = cv2.FONT_HERSHEY_SIMPLEX
         fontScale = 2
-        color = (255, 255, 255)
+        color = (0, 255, 255)
         thickness = 2
         display_test = "new text \n"
 
@@ -164,14 +171,18 @@ class marker:
         if self.marker_dict is not None:
             for i, k in enumerate(self.marker_dict):
                 if k < 20:
-                    display_text = 'ID : ' + str(k) + ' D : ' + str(self.marker_dict[k]) + '\n'
-                    org = (200 , 100*(i+1))
+                    display_text = 'ID : ' + str(k) + ' D_wo_zero : ' + str(self.marker_dict[k]['non_zero_roi_depth']) + '\n'
+                    org = (200 , 100*(i+2))
                     self.text_image = cv2.putText(id_background , display_text , org , font , fontScale , color , thickness , cv2.LINE_AA)
-
+                    
+                    if 'with_zero_roi_depth' in self.marker_dict[k]:
+                        org_2 = (200 , 100*(i+1))
+                        display_text_2 = 'ID : ' + str(k) + ' D_w_zero : ' + str(self.marker_dict[k]['with_zero_roi_depth']) + '\n'
+                        self.text_image = cv2.putText(id_background , display_text_2 , org_2 , font , fontScale , color , thickness , cv2.LINE_AA)
 
     # get an particular id's mask image 
     # just an testing script for testing all the holes in the marker
-    def mask_test(self, id):
+    def single_marker_mask_test(self, id):
 
         # create an maske image
         mask = np.zeros(self.depth_image.shape , dtype = np.uint8)
@@ -199,16 +210,25 @@ class marker:
             mask = cv2.bitwise_and(self.depth_image , self.depth_image , mask = mask)
 
             # apply color map for the mask image
-            mask = cv2.applyColorMap(cv2.convertScaleAbs(mask , alpha = 0.04) , cv2.COLORMAP_JET)
+            self.mask_image = cv2.applyColorMap(cv2.convertScaleAbs(mask , alpha = 0.04) , cv2.COLORMAP_JET)
         
         return mask
     
 
-    # here is the function that will generate the mask image and also plot the histogram for the depth
-    # Base on the historgram it will tell us how much of the image have holes in it
-    def mask_hist_plot(self, id):
-    # create an maske image
+    # here is the function that will generate the mask image and also generate depth pixel list for histogram ploting
+    # main thing in this program is to impletement the ray casting algortium to varify the point in Polygon
+    # need to generate the histogram inside the main funcion due to multithread capabilty
+    # DO NOT USE, VERY HEAVY, JUST HERE FOR FURTURE CUDA APPLICATION
+    def single_marker_mask_hist_rc(self, id):
+        
+        # create an maske image
         mask = np.zeros(self.depth_image.shape , dtype = np.uint8)
+
+        # clear the value inside the self.pixel_depth
+        self.depth_pixel.clear()
+
+        # debugging purpose
+        self.test_image = self.color_image
         
         # check to see if marker is in the dictionary
         if id in self.marker_dict:
@@ -225,40 +245,62 @@ class marker:
 
             # concatenate the numpy array as an single 2X4 array
             marker_corner_np = np.concatenate((marker_corner_0 , marker_corner_1 , marker_corner_2 , marker_corner_3) , axis = 0)
+            marker_corner_np = self.__corner_sorting(marker_corner_np)
 
             # create an poly fill base on the marker corners
             cv2.fillPoly(mask , [marker_corner_np] , 255)
             
             # ray casting algrotium to find all the pixel information within the bounding box
+            x_max = max(marker_corner_np[:,0])
+            x_min = min(marker_corner_np[:,0])
+            y_max = max(marker_corner_np[:,1])
+            y_min = min(marker_corner_np[:,1])
+
+            # check every point within that bounding box to save compute time
+            for x in range(x_min, x_max):
+                for y in range(y_min, y_max):
+                    
+                    # here is the part to check see if pixel is within the min and max boxes
+                    pixel_status = self.__ray_casting_check(x , y, marker_corner_np)
+
+                    # append value into list
+                    if pixel_status == True:
+
+                        # append depth image into an depth pixel array
+                        # mat object in opencv is not really
+                        self.depth_pixel[id].append(self.depth_image[y][x])
+
+                        # here is the part to do validation
+                        self.test_image[y][x] = (0 , 0, 255)
 
 
 
             # roi depth mask for image
-            mask = cv2.bitwise_and(self.depth_image , self.depth_image , mask = mask)
+            #mask = cv2.bitwise_and(self.depth_image , self.depth_image , mask = mask)
 
             # apply color map for the mask image
-            mask = cv2.applyColorMap(cv2.convertScaleAbs(mask , alpha = 0.04) , cv2.COLORMAP_JET)
+            self.mask_image = cv2.applyColorMap(cv2.convertScaleAbs(mask , alpha = 0.04) , cv2.COLORMAP_JET)
+
         
         return mask
 
 
-    ###################################################
-    ###             Private Function                ###
-    ###################################################
-    ################################################################################################################################################
+    # this function is to generate the mask image and also generate depth pixel list for histogram plotting
+    # This is using cv2.fillpoly generate the mask and use the mask to extract all the depth pixel inside the polygon
+    # need to generate the histogram inside the main function due to multithread capability
+    def single_marker_mask_hist_fillpoly(self, id):
+         # create an maske image
+        mask = np.zeros(self.depth_image.shape , dtype = np.uint8)
 
-    # ray casting function to check see if pixel is within the polygon
-    # looking for an specific aruco marker in the marker dict
-    def ray_casting_check(self, point_x , point_y ,id):
+        # clear the value inside the self.pixel_depth
+        self.depth_pixel.clear()
 
-        # we start from outside of the polygon            
-        # states variable declear
-        inside = False
+        # debugging purpose
+        self.test_image = self.color_image
         
-        # error check make sure the ID we passed in is detected
+        # check to see if marker is in the dictionary
         if id in self.marker_dict:
-            
-
+             
             # import all the object into an np array 
             marker_corner_0 = np.array(self.marker_dict[id]['corner_0'] , dtype = np.int32)
             marker_corner_0 = np.expand_dims(marker_corner_0 , axis = 0)
@@ -271,61 +313,80 @@ class marker:
 
             # concatenate the numpy array as an single 2X4 array
             marker_corner_np = np.concatenate((marker_corner_0 , marker_corner_1 , marker_corner_2 , marker_corner_3) , axis = 0)
-            
-            # pass corners into the sorting algorithms to get them in an rotation oriantation
             marker_corner_np = self.__corner_sorting(marker_corner_np)
-            print(marker_corner_np)
 
-
-
-            # loop though all the corners
-            n = marker_corner_np.shape[0]
-
-            for i in range(n):
-
-                # import the first two point
-                p1x = marker_corner_np[i-1][0]
-                p1y = marker_corner_np[i-1][1]
-                p2x = marker_corner_np[i][0]
-                p2y = marker_corner_np[i][1]
-
-                # compare the y value to make sure p1y is the lower point
-                if p1y > p2y:
-                    p1x , p1y , p2x , p2y = p2x , p2y , p1x , p1y 
-                
-                # check if the point is the same height as p1y and p2y
-                #if point_y == p1y or point_y == p2y:
-                    
-                    # add an fraction on it to make sure when we calculate the intercept there will not be divided by 0
-                    #point_y = point_y + 0.001
-
-                # check intercept on the horiztal ray casting
-                if point_y > p1y and point_y <= p2y:
-
-                    # check if the points are within the bounding box range to save compute time
-                    if point_x <= max(p1x , p2x):
-                        
-                        # make sure that we are not going to divide 0
-                        if p1y != p2y and point_y != p1y:
-                            
-                            # check the slope to make up the odd even times that the ray passing by
-                            m_edge = (p2x - p1x) / (p2y - p1y)
-                            m_point = (point_x - p1x) / (point_y - p1y)
-
-                        # check the slope to see we just need to make sure either one is bigger to get and odd number
-                    
-                        if m_point < m_edge:
-                            inside = not inside
-                        
-                    
-                        print("intercept with " , i-1 ,  i)
-
-                    
-
+            # create an poly fill base on the marker corners
+            cv2.fillPoly(mask , [marker_corner_np] , 255)
             
-        else:
-            print("Marker not in class")
+            # append depth image into an depth pixel array
+            # mat object in opencv is not really
+            depth_pixel_np = self.depth_image[mask == 255]
+            self.depth_pixel = depth_pixel_np.tolist()
 
+            # here is the part to trying calculate avg value with zeros values
+            self.marker_dict[id]['with_zero_roi_depth'] = np.mean(depth_pixel_np)
+
+
+            # roi depth mask for image
+            mask = cv2.bitwise_and(self.depth_image , self.depth_image , mask = mask)
+
+            # apply color map for the mask image
+            self.mask_image = cv2.applyColorMap(cv2.convertScaleAbs(mask , alpha = 0.04) , cv2.COLORMAP_JET)
+
+        
+        return mask
+
+
+
+
+    ###################################################
+    ###             Private Function                ###
+    ###################################################
+    ################################################################################################################################################
+
+    # ray casting function to check see if pixel is within the polygon
+    # looking for an specific aruco marker in the marker dict
+    def __ray_casting_check(self, point_x , point_y , marker_corner_np):
+
+        # we start from outside of the polygon            
+        # states variable declear
+        inside = False
+        
+        # loop though all the corners
+        n = marker_corner_np.shape[0]
+
+        for i in range(n):
+
+            # import the first two point
+            p1x = marker_corner_np[i-1][0]
+            p1y = marker_corner_np[i-1][1]
+            p2x = marker_corner_np[i][0]
+            p2y = marker_corner_np[i][1]
+
+            # compare the y value to make sure p1y is the lower point
+            if p1y > p2y:
+                p1x , p1y , p2x , p2y = p2x , p2y , p1x , p1y 
+            
+            # check intercept on the horiztal ray casting
+            if point_y > p1y and point_y <= p2y:
+
+                # check if the points are within the bounding box range to save compute time
+                if point_x <= max(p1x , p2x):
+                    
+                    # make sure that we are not going to divide 0
+                    if p1y != p2y and point_y != p1y:
+                        
+                        # check the slope to make up the odd even times that the ray passing by
+                        m_edge = (p2x - p1x) / (p2y - p1y)
+                        m_point = (point_x - p1x) / (point_y - p1y)
+
+                    # check the slope to see we just need to make sure either one is bigger to get and odd number
+                
+                    if m_point < m_edge:
+                        inside = not inside
+                    
+                
+                    #print("intercept with " , i-1 ,  i)
 
         return inside
 

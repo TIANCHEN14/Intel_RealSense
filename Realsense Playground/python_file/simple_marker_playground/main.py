@@ -1,31 +1,87 @@
 import cv2
+import threading
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 from D405_lib import marker
 
-marker_obj = marker()
-
-while True:
-    marker_obj.get_frames()
-    marker_obj.simple_marker_detection()
-    mask_img = marker_obj.mask_test(1)
-    check_point = marker_obj.ray_casting_check(700 , 500, 1)
+# application class for handling the multithread operation
+class Application:
     
-    # debuging  
-    if check_point == True:
-        cv2.circle(mask_img , (700,500) , 20 , (255, 255, 255) , 5)
-    else :
-        cv2.circle(mask_img , (700,500) , 20 , (0 , 0 , 0) , 5)
+    # start the application object, including the marker object
+    def __init__(self):
+        
+        # define marker object
+        self.marker = marker()
+        self.stop_event = threading.Event()
+
+    # start of the video streams
+    def video_stream(self):
+
+        # start the video stream for the intel realsense cameraq
+        while not self.stop_event.is_set():
+
+            # getting all the frames from camera
+            rs_status = self.marker.get_frames()
+            
+            if rs_status:
+
+                # run aruco marker detector
+                self.marker.simple_marker_detection()
+                # doing marker historgram detection
+                depth_mask = self.marker.single_marker_mask_hist_fillpoly(1)
+                # generate text image
+                self.marker.txt_image_generation()
+
+                main_image = np.vstack((self.marker.mask_image , self.marker.text_image))
+
+                cv2.imshow("video stream" , main_image)
+
+            # pressing esc to exit out of the windows
+            key = cv2.waitKey(1)
+
+            if key & 0XFF == ord('q') or key == 27:
+                self.stop_event.set()
+                break
 
 
-    merge_image = np.hstack((marker_obj.color_image , marker_obj.depth_colormap))
+    # thread worker to start the stream
+    def start_stream_thread(self):
+        threading.Thread(target= self.video_stream, daemon = True).start()
 
-    print(check_point)
+    # update plot function
+    def update_plot(self, frame , id):
 
-    cv2.namedWindow('masked image' , cv2.WINDOW_AUTOSIZE)
-    cv2.imshow('masked image' , mask_img)
-    key = cv2.waitKey(1)
+        # import the depth pixel information
+        # hasattr function is here to make sure depth pixel is inside of marker object
+        if hasattr(self.marker, 'depth_pixel'): 
+            
+            if id in self.marker.depth_pixel.keys():
+                # import depth pixel
+                depth_pixel = self.marker.depth_pixel[id]
 
-    if key & 0XFF == ord('q') or key == 27:
-        cv2.destroyAllWindows()
+                # check make sure it is not an empty list
+                if depth_pixel:
+                    
+                    # clear current plot to not overlay
+                    plt.cla()
+                    plt.hist(depth_pixel, bins= 200, color = 'blue')
+                    plt.title("pixel density hist")
+                    plt.xlabel('depth value')
+                    plt.ylabel('sample count')
 
-        break
+    # main function to run the project
+    def run(self):
+        #self.start_stream_thread()
+        self.start_stream_thread()
+        # setup for live historgram plot
+        fig, ax = plt.subplots()
+        ani = FuncAnimation(fig, self.update_plot(frame = None, id = 1), interval = 1000)
+
+        plt.show()
+        self.stop_event.set()
+
+
+if __name__ == "__main__":
+    app = Application()
+    app.run()
