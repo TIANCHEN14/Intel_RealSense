@@ -18,7 +18,7 @@ try:
         # this call waits until a new coherent set if frames is available on a device
         frames = pipeline.wait_for_frames()
         depth = frames.get_depth_frame()
-        if not depth: contiune
+        if not depth: continue
 
         # print an simple text base respresnetion of the image
 

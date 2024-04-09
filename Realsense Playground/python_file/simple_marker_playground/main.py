@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from D405_lib import marker
+import streamlit as st
 
 # application class for handling the multithread operation
 class Application:
@@ -50,7 +51,7 @@ class Application:
         threading.Thread(target= self.video_stream, daemon = True).start()
 
     # update plot function
-    def update_plot(self, frame , id):
+    def update_plot(self, frame, ax , id):
 
         # import the depth pixel information
         # hasattr function is here to make sure depth pixel is inside of marker object
@@ -64,11 +65,9 @@ class Application:
                 if depth_pixel:
                     
                     # clear current plot to not overlay
-                    plt.cla()
-                    plt.hist(depth_pixel, bins= 200, color = 'blue')
-                    plt.title("pixel density hist")
-                    plt.xlabel('depth value')
-                    plt.ylabel('sample count')
+                    ax.cla()
+                    ax.hist(depth_pixel, bins= 200, color = 'blue')
+                    ax.set(title = 'Pixel density diagram' , xlabel = 'Depth Value' , ylabel = 'Sample Count')
 
     # main function to run the project
     def run(self):
@@ -76,7 +75,8 @@ class Application:
         self.start_stream_thread()
         # setup for live historgram plot
         fig, ax = plt.subplots()
-        ani = FuncAnimation(fig, self.update_plot(frame = None, id = 1), interval = 1000)
+        ani = FuncAnimation(fig, self.update_plot , fargs = (ax, 1), interval = 1000)
+
 
         plt.show()
         self.stop_event.set()

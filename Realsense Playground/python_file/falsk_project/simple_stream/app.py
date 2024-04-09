@@ -1,5 +1,5 @@
 #####################################################
-##          Depth camera with streamlit            ##
+##          Depth camera with flask                ##
 #####################################################
 
 # First import the library
